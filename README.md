@@ -1,167 +1,158 @@
 # COMPAS Forge 🛠️
 
-> **An Open-Source, Research-Oriented Geometry Verification & Fabrication Preflight Engine for the COMPAS Ecosystem**
-
 <p align="center">
-  <img src="assets/banner.png" alt="COMPAS Forge Banner" width="100%">
+  <a href="LICENSE">
+    <img src="https://img.shields.io/github/license/moaminmo90/compas-forge" alt="License">
+  </a>
+  <a href="https://www.python.org/">
+    <img src="https://img.shields.io/badge/Python-3.14+-blue.svg" alt="Python">
+  </a>
+  <a href="https://www.rust-lang.org/">
+    <img src="https://img.shields.io/badge/Rust-1.96+-orange.svg" alt="Rust">
+  </a>
+  <a href="https://compas.dev/">
+    <img src="https://img.shields.io/badge/Built%20for-COMPAS-purple" alt="COMPAS">
+  </a>
+  <img src="https://img.shields.io/badge/Status-Research-green" alt="Status">
 </p>
 
-<p align="center">
-
-![License](https://img.shields.io/github/license/moaminmo90/compas-forge)
-![Python](https://img.shields.io/badge/Python-3.14+-blue.svg)
-![Rust](https://img.shields.io/badge/Rust-1.96+-orange.svg)
-![COMPAS](https://img.shields.io/badge/Built%20for-COMPAS-purple)
-![Status](https://img.shields.io/badge/Status-Research-green)
-
-</p>
-
----
-
-# Overview
-
-COMPAS Forge is an open-source, high-performance geometry verification and fabrication preflight engine developed for the **COMPAS** ecosystem.
-
-It bridges computational geometry with digital fabrication by performing fast topology validation, manufacturability checks, collision analysis, and automatic mesh repair before fabrication.
-
-The core engine is written in **Rust** and exposed to Python via **PyO3** and **Maturin**, combining Python usability with systems-level performance.
-
----
-
-# Features
-
-- SIMD-Accelerated JSON Parsing (`simd-json`)
-- Parallel Topology Analysis (`Rayon`)
-- Automatic Mesh Repair
-- Spatial Clash Detection
-- Manufacturing Rule Verification
-- Interactive HTML Reports
-- WebGL 3D Viewer (Three.js)
-- Industrial Fabrication Profiles
-- Rust + Python Architecture
-- Research-Oriented Design
-
----
-
-# Showcase
+> **An Open-Source, High-Performance Rust-Backed Geometry Verification & Preflight Assembly Clearance Engine for the COMPAS Framework**
 
 <p align="center">
-<img src="assets/banner.png" width="100%">
+  <img src="assets/banner.png" alt="COMPAS Forge Showcase" width="100%"/>
 </p>
 
----
+COMPAS Forge is an open-source, high-performance geometry verification and digital fabrication preflight suite developed to bridge the gap between computational design environments such as Rhino, Grasshopper, and Blender, and real-world physical manufacturing.
 
-# Research Vision
+Bound to the **COMPAS** ecosystem, this library provides microsecond-precision topological and physical validation checks, optimizing CAD models before exporting them to robotic paths or CNC machinery.
 
-Modern digital fabrication workflows require reliable geometric verification before robotic execution.
-
-COMPAS Forge provides a non-destructive verification pipeline capable of validating:
-
-- Topology
-- Watertightness
-- Mesh Quality
-- Spatial Clearance
-- Manufacturing Constraints
-- Fabrication Profiles
-
-before geometry reaches robotic systems such as:
-
-- COMPAS Timber
-- COMPAS FAB
-- PyBullet
-- MoveIt
-- CNC Toolchains
+*This is an open-source, research-oriented library designed for academic collaboration. We invite researchers, roboticists, and computational designers to contribute, extend fabrication profiles, and integrate advanced geometric solvers.*
 
 ---
 
-# Technology Stack
+## Installation
 
-| Component | Technology |
-|------------|------------|
-| Language | Rust |
-| Python Binding | PyO3 |
-| Build System | Maturin |
-| JSON Parser | simd-json |
-| Parallelism | Rayon |
-| Spatial Index | rstar |
-| Collision Solver | parry3d-f64 |
-| Web Viewer | Three.js |
-| HTML Dashboard | TailwindCSS |
+### Standard Installation
 
----
+Once released, COMPAS Forge can be installed from PyPI:
 
-# Mathematical Foundations
+```bash
+pip install compas-forge
+```
 
-## Mesh Volume
+### Installation from Source
 
-Signed mesh volume is computed using Gauss' Divergence Theorem.
+If you wish to modify the Rust core, ensure that you have the Rust toolchain installed.
 
-\[
-V=\frac16\sum_i p_0\cdot(p_1\times p_2)
-\]
+Requirements:
 
----
-
-## Newell Plane Estimation
-
-Polygon planarity is evaluated using Newell's Method.
-
-Maximum deviation:
-
-\[
-d_{max}=\max_i |(v_i-c)\cdot n|
-\]
-
----
-
-## Euler Characteristic
-
-\[
-\chi = V-E+F
-\]
-
-Genus
-
-\[
-g=\frac{2-\chi}{2}
-\]
-
----
-
-## Facet Quality
-
-\[
-q=\frac{4\sqrt3A}{a^2+b^2+c^2}
-\]
-
----
-
-# Installation
-
-## Requirements
-
-- Rust 1.96+
+- Rustc 1.96+
 - Python 3.14+
-
-Clone the repository:
 
 ```bash
 git clone https://github.com/moaminmo90/compas-forge.git
-
 cd compas-forge
-```
-
-Install:
-
-```bash
 pip install -e .
 ```
 
 ---
 
-# Command Line Interface
+## Python API Usage Guide
 
-Display help
+You can import `compas_forge` directly inside Python scripts, Grasshopper Python components, or Blender scripts.
+
+---
+
+### 1. High-Fidelity Preflight Verification
+
+Verify whether a model complies with manufacturing constraints such as dimensions, weight, watertightness, and robotic fabrication profile limits.
+
+```python
+import compas_forge
+
+# Run preflight against the KUKA robotic timber fabrication profile
+report = compas_forge.run_preflight_profile(
+    "my_geometry.json",
+    "kuka-timber"
+)
+
+if report["is_compliant"]:
+    print("✔️ Model is safe for robotic toolpaths.")
+else:
+    print("❌ Preflight violations found!")
+    print(f"  • Watertight: {report['is_watertight']}")
+    print(f"  • Calculated Mass: {report['estimated_mass_kg']:.3f} kg")
+    print(f"  • Open Holes / Naked Edges: {report['boundary_edges_count']}")
+```
+
+---
+
+### 2. Auto-Repairing Topological Defects
+
+Automatically weld duplicate vertices and unify face winding directions using a Rust-backed BFS dual-graph traversal.
+
+```python
+import json
+import compas_forge
+
+# Repair on the fly and fetch a detailed audit trail
+repair_report = compas_forge.fix_geometry_file("dirty_mesh.json")
+
+print("Mesh repaired successfully:")
+print(f"  • Merged Vertices: {repair_report['welded_count']}")
+print(f"  • Corrected Face Windings: {repair_report['flipped_count']}")
+
+# Export the clean COMPAS structure back to JSON
+fixed_data = json.loads(repair_report["fixed_json"])
+
+with open("repaired_mesh.json", "w", encoding="utf-8") as f:
+    json.dump(fixed_data, f, indent=4)
+```
+
+---
+
+### 3. Assembly Collision & Clearance Solver
+
+Find spatial interferences and clearance violations among multiple CAD components using R*-Tree broad-phase filtering and exact narrow-phase distance checks.
+
+```python
+import compas_forge
+
+assembly_files = {
+    "beam_a.json": open("beam_a.json", encoding="utf-8").read(),
+    "beam_b.json": open("beam_b.json", encoding="utf-8").read(),
+}
+
+# Find collisions with a strict 5cm safety clearance threshold
+violations = compas_forge.check_assembly_clashes(
+    assembly_files,
+    clearance_tolerance=0.05
+)
+
+for idx, violation in enumerate(violations, 1):
+    incident_type = (
+        "Collision"
+        if violation["has_intersection"]
+        else "Clearance Violation"
+    )
+
+    print(
+        f"[{idx}] "
+        f"{violation['part_a']} <-> {violation['part_b']} | "
+        f"Distance: {violation['minimum_distance']:.5f} m | "
+        f"Type: {incident_type}"
+    )
+```
+
+---
+
+## CLI Usage Guide
+
+COMPAS Forge is also packaged with an auto-documented command line interface built with `click`.
+
+---
+
+### 1. General Help Menu
 
 ```bash
 python -m compas_forge --help
@@ -169,101 +160,99 @@ python -m compas_forge --help
 
 ---
 
-## Preflight
-
-Run manufacturing verification.
+### 2. Run Preflight Audit
 
 ```bash
-python -m compas_forge preflight model.json \
-    --profile kuka-timber \
-    --report report.html
+python -m compas_forge preflight my_geometry.json \
+  --profile kuka-timber \
+  -r preflight_report.html
 ```
-
-Options
-
-| Option | Description |
-|---------|-------------|
-| --profile | Fabrication profile |
-| --report | HTML report output |
 
 ---
 
-## Clash Detection
+### 3. Run Assembly Clash Detection
 
 ```bash
 python -m compas_forge clash mesh_a.json mesh_b.json \
-    --clearance 0.05
+  --clearance 0.05
 ```
 
 ---
 
-## Mesh Repair
+### 4. Execute Mesh Repair Auto-Fixer
 
 ```bash
 python -m compas_forge fix dirty_mesh.json \
-    --output repaired_mesh.json
+  -o repaired_mesh.json
 ```
 
 ---
 
-# Example Output
+## Mathematical Formulations & Algorithms
 
-The generated HTML report includes
+### 1. Mesh Volume via Gauss's Divergence Theorem
 
-- Manufacturing Summary
-- Mesh Statistics
-- Interactive WebGL Viewer
-- Topological Diagnostics
-- Clearance Analysis
-- Mesh Repair Report
-- Pipeline Performance
+The exact volume $V$ of an arbitrary closed manifold mesh is calculated by summing signed tetrahedra formed from the origin to each boundary triangle:
 
----
+$$
+V = \frac{1}{6} \sum_i \mathbf{p}_0 \cdot \left(\mathbf{p}_1 \times \mathbf{p}_2\right)
+$$
 
-# Roadmap
-
-- [x] Rust Geometry Core
-- [x] Manufacturing Profiles
-- [x] Interactive HTML Reports
-- [x] Clash Detection
-- [x] Mesh Repair
-
-Future work
-
-- COMPAS Timber Integration
-- COMPAS FAB Integration
-- IFC Support
-- STEP Import
-- glTF Export
-- GPU Acceleration
-- WebAssembly Viewer
+where $\mathbf{p}_0$, $\mathbf{p}_1$, and $\mathbf{p}_2$ are the vertex coordinates of each triangulated face.
 
 ---
 
-# Contributing
+### 2. Best-Fit Newell Plane & Planarity Deviation
 
-Contributions are welcome.
+AEC facade rationalization and timber stock cutting often require robust flatness evaluation. Best-fit reference plane normals are calculated using Newell's method:
 
-Feel free to submit issues, feature requests, or pull requests.
+$$
+n_x = \sum_{i=0}^{N-1} (y_i - y_{i+1})(z_i + z_{i+1})
+$$
+
+$$
+n_y = \sum_{i=0}^{N-1} (z_i - z_{i+1})(x_i + x_{i+1})
+$$
+
+$$
+n_z = \sum_{i=0}^{N-1} (x_i - x_{i+1})(y_i + y_{i+1})
+$$
+
+The maximum perpendicular distance $d_{max}$ of any vertex $\mathbf{v}_i$ to the centroid plane $\mathbf{c}$ is evaluated as:
+
+$$
+d_{max} = \max_i \left|(\mathbf{v}_i - \mathbf{c}) \cdot \mathbf{n}\right|
+$$
 
 ---
 
-# Author
+### 3. Topological Invariants
 
-**Mohammad Amin Moradi**
+Algebraic topology validation checks the Euler characteristic $\chi$ and genus $g$ of closed manifold meshes to guarantee topological integrity:
 
-GitHub
+$$
+\chi = V - E + F
+$$
 
-https://github.com/moaminmo90
+$$
+g = \frac{2 - \chi}{2}
+$$
 
-LinkedIn
-
-https://linkedin.com/in/moaminmo90
+where $V$ is the vertex count, $E$ is the unique undirected edge count, and $F$ is the face count.
 
 ---
 
-# License
+## Author & Academic Profile
 
-This project is licensed under the **MIT License**.
+Developed by **Mohammad Amin Moradi** at the intersection of computational geometry, systems programming, and digital fabrication in AEC.
 
-See the **LICENSE** file for details.
+- **GitHub:** <https://github.com/moaminmo90>
+- **LinkedIn:** <https://www.linkedin.com/in/moaminmo90>
+
+---
+
+## License
+
+Licensed under the **MIT License**.
+
+See the **[LICENSE](LICENSE)** file for details.

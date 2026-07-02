@@ -4,8 +4,9 @@ build-backend = "maturin"
 
 [project]
 name = "compas-forge"
-version = "0.1.0"
+version = "0.1.1" # Updated version to 0.1.1
 description = "High-performance pre-flight validation and geometry QA engine for COMPAS framework"
+readme = "README.md" # Added link to display the scientific markdown on PyPI
 requires-python = ">=3.10"
 authors = [
     { name = "AEC Systems Developer", email = "research@compas-forge.org" }
