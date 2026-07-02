@@ -1,0 +1,32 @@
+# --- Rust Build Artifacts ---
+/target/
+Cargo.lock
+
+# --- Python Compiled Files & Caches ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.dylib
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# --- Local Generated CAD & Test Data ---
+*_mesh.json
+*cube.json
+*_shell.json
+*_column.json
+*_beam.json
+*.html
+generate_test_data.py
+generate_sota_test.py
+generate_complex_demos.py
+
+# --- IDE & System Files ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
