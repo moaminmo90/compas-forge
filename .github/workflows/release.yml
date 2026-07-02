@@ -36,16 +36,18 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.os }}
-          path: dist
+          path: dist/*
 
   publish:
     name: Publish to PyPI
     runs-on: ubuntu-latest
     needs: [build_wheels]
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download all wheels
+        uses: actions/download-artifact@v4
         with:
-          merge-behavior: list
+          pattern: wheels-*
+          merge-multiple: true # Flattens all build matrix wheels into a single directory
           path: dist
 
       - name: Publish to PyPI
