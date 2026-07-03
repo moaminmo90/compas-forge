@@ -1,8 +1,12 @@
-# --- Rust Build Artifacts ---
+# ==========================================
+# COMPAS Forge - Official .gitignore File
+# ==========================================
+
+# --- Rust Compiled Artifacts & Caches ---
 /target/
 Cargo.lock
 
-# --- Python Compiled Files & Caches ---
+# --- Python Compiled Files & Environments ---
 __pycache__/
 *.pyc
 *.pyo
@@ -13,19 +17,27 @@ __pycache__/
 .eggs/
 dist/
 build/
+venv/
+.venv/
+env/
+.env/
 
-# --- Local Generated CAD & Test Data ---
+# --- Dynamic Compiled C Extensions (Local Builds) ---
+python/compas_forge/_core.pyd
+python/compas_forge/_core.*.pyd
+python/compas_forge/_core.*.so
+
+# --- CAD testing outputs & temporary file buffers ---
 *_mesh.json
 *cube.json
 *_shell.json
 *_column.json
 *_beam.json
 *.html
-generate_test_data.py
-generate_sota_test.py
-generate_complex_demos.py
+temp_preflight_model.json
+temp_benchmark_mesh.json
 
-# --- IDE & System Files ---
+# --- IDE, Editor, & OS System Files ---
 .vscode/
 .idea/
 .DS_Store

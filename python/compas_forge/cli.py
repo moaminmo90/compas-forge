@@ -5,10 +5,28 @@ import json
 import time
 from rich.console import Console
 from rich.table import Table
-from compas_forge import verify_file, check_assembly_clashes, fix_geometry_file, run_preflight_profile
+from compas.datastructures import Mesh
+from compas_forge import (
+    verify_file, 
+    check_assembly_clashes, 
+    fix_geometry_file, 
+    run_preflight_profile,
+    verify_mesh_zero_copy,
+    check_swept_collision_zero_copy,
+    compute_assembly_contacts_zero_copy
+)
 from compas_forge.reporter import generate_html_report
 
 console = Console()
+
+def parse_pose_str(pose_str):
+    try:
+        parts = [float(x.strip()) for x in pose_str.split(',')]
+        if len(parts) != 7:
+            raise ValueError()
+        return parts
+    except Exception:
+        raise click.BadParameter("Pose must be 7 comma-separated floats: x,y,z,qx,qy,qz,qw")
 
 @click.group()
 def main():
@@ -25,7 +43,9 @@ def check(filepath):
     """
     console.print(f"[bold blue]Initiating structural scan on:[/bold blue] {filepath}")
     try:
-        report = verify_file(filepath)
+        mesh = Mesh.from_json(filepath)
+        report = verify_mesh_zero_copy(mesh)
+        
         table = Table(title="[bold green]COMPAS Forge Diagnostics Summary[/bold green]")
         table.add_column("Property", style="cyan")
         table.add_column("Count / Value", style="magenta")
@@ -68,9 +88,9 @@ def check(filepath):
 
 @main.command()
 @click.argument('filepath', type=click.Path(exists=True))
-@click.option('--profile', '-p', type=click.Choice(['kuka-timber', 'abb-concrete-3dprint']), required=True, help="Target fabrication profile thresholds")
-@click.option('--report', '-r', type=click.Path(), required=False, help="Generate a standalone interactive HTML dashboard")
-def preflight(filepath, profile, report):
+@click.option('--profile', '-p', type=click.StringHolder, default="kuka-timber")
+@click.option('--report-out', '-r', type=click.Path(), required=False)
+def preflight(filepath, profile, report_out):
     """
     Executes a high-fidelity physical and topological simulation check against manufacturing thresholds.
     """
@@ -110,7 +130,6 @@ def preflight(filepath, profile, report):
         wt_status = "[green]PASS[/green]" if preflight_data["is_watertight"] else "[red]FAIL[/red]"
         table.add_row("Naked Edges (Holes Count)", str(preflight_data["boundary_edges_count"]), wt_status)
 
-        # Print SOTA newly added metrics
         table.add_row("Euler Characteristic (χ)", str(preflight_data["euler_characteristic"]), "[green]INFO[/green]")
         table.add_row("Geometric Genus (g)", str(preflight_data["genus"]), "[green]INFO[/green]")
         
@@ -129,11 +148,11 @@ def preflight(filepath, profile, report):
             "Winding_Orientation_Weld_Repairs": t_fix_ms
         }
 
-        if report:
+        if report_out:
             t3 = time.perf_counter_ns()
-            generate_html_report(diagnostics, preflight_data, rep_data, timing_profile, report)
+            generate_html_report(diagnostics, preflight_data, rep_data, timing_profile, report_out)
             t_rep_ms = (time.perf_counter_ns() - t3) / 1_000_000.0
-            console.print(f"\n[bold green]✔ Interactive HTML preflight report generated successfully at:[/bold green] {report}")
+            console.print(f"\n[bold green]✔ Interactive HTML preflight report generated successfully at:[/bold green] {report_out}")
 
         if preflight_data["is_compliant"]:
             console.print(f"\n[bold green]✔ PREFLIGHT COMPLIANT: The component fits all manufacturing thresholds for '{profile}'. Ready to export to robotic paths.[/bold green]")
@@ -166,37 +185,6 @@ def fix(filepath, output):
         table.add_row("Merged Duplicate Vertices (Weld)", str(report["welded_count"]), "FIXED")
         table.add_row("Flipped Winding Normal Directions", str(report["flipped_count"]), "FIXED")
         console.print(table)
-
-        if report["weld_details"]:
-            console.print("\n[bold yellow]🔍 Vertex Weld Audit Trail (Merged Duplicates):[/bold yellow]")
-            weld_table = Table()
-            weld_table.add_column("Duplicate Index", style="red")
-            weld_table.add_column("Merged Into Index", style="green")
-            weld_table.add_column("Physical Coordinates [X, Y, Z]", style="cyan")
-            
-            for log in report["weld_details"][:5]:
-                coords_str = f"[{log['coordinates'][0]:.4f}, {log['coordinates'][1]:.4f}, {log['coordinates'][2]:.4f}]"
-                weld_table.add_row(str(log["old_index"]), str(log["merged_into"]), coords_str)
-            console.print(weld_table)
-            if len(report["weld_details"]) > 5:
-                console.print(f"  [italic]...and {len(report['weld_details']) - 5} more vertex merging operations.[/italic]")
-
-        if report["flip_details"]:
-            console.print("\n[bold yellow]🔍 Face Normal Alignment Audit Trail (Winding Reversals):[/bold yellow]")
-            flip_table = Table()
-            flip_table.add_column("Face Index", style="cyan")
-            flip_table.add_column("Original Winding Order", style="red")
-            flip_table.add_column("Corrected Winding Order", style="green")
-            
-            for log in report["flip_details"][:5]:
-                flip_table.add_row(
-                    str(log["face_index"]), 
-                    str(log["old_winding"]), 
-                    str(log["new_winding"])
-                )
-            console.print(flip_table)
-            if len(report["flip_details"]) > 5:
-                console.print(f"  [italic]...and {len(report['flip_details']) - 5} more face normal unification alignments.[/italic]")
 
         fixed_data = json.loads(report["fixed_json"])
         with open(output, 'w', encoding='utf-8') as f:
@@ -267,6 +255,96 @@ def clash(files, clearance):
 
     except Exception as e:
         console.print(f"[bold red]Clash processing failed:[/bold red] {e}")
+        sys.exit(2)
+
+
+@main.command()
+@click.argument('mesh_a_path', type=click.Path(exists=True))
+@click.argument('pose_a_start_str')
+@click.argument('pose_a_end_str')
+@click.argument('mesh_b_path', type=click.Path(exists=True))
+@click.argument('pose_b_start_str')
+@click.argument('pose_b_end_str')
+def swept(mesh_a_path, pose_a_start_str, pose_a_end_str, mesh_b_path, pose_b_start_str, pose_b_end_str):
+    """
+    Continuous Collision Detection (CCD) between two moving COMPAS meshes.
+    Poses format: x,y,z,qx,qy,qz,qw
+    """
+    console.print("[bold blue]Executing continuous swept trajectory intersection (CCD)...[/bold blue]")
+    try:
+        mesh_a = Mesh.from_json(mesh_a_path)
+        mesh_b = Mesh.from_json(mesh_b_path)
+
+        pose_a_start = parse_pose_str(pose_a_start_str)
+        pose_a_end = parse_pose_str(pose_a_end_str)
+        pose_b_start = parse_pose_str(pose_b_start_str)
+        pose_b_end = parse_pose_str(pose_b_end_str)
+
+        t0 = time.perf_counter_ns()
+        result = check_swept_collision_zero_copy(
+            mesh_a, pose_a_start, pose_a_end,
+            mesh_b, pose_b_start, pose_b_end
+        )
+        t_ms = (time.perf_counter_ns() - t0) / 1_000_000.0
+
+        table = Table(title="[bold green]Continuous Collision Detection (CCD) Report[/bold green]")
+        table.add_column("Parameter", style="cyan")
+        table.add_column("Calculated Metric", style="magenta")
+
+        table.add_row("Evaluation Time", f"{t_ms:.4f} ms")
+        table.add_row("Collision Detected", "[red]TRUE[/red]" if result["has_collision"] else "[green]FALSE[/green]")
+        table.add_row("First Time of Impact (TOI)", f"{result['time_of_impact']:.6f} s")
+        table.add_row("Impact Normal vector", str(result["normal_a"]))
+        table.add_row("Impact Point A (Witness)", str(result["witness_a"]))
+        table.add_row("Impact Point B (Witness)", str(result["witness_b"]))
+
+        console.print(table)
+        sys.exit(0)
+    except Exception as e:
+        console.print(f"[bold red]CCD computation failed:[/bold red] {e}")
+        sys.exit(2)
+
+
+@main.command()
+@click.argument('files', nargs=-1, type=click.Path(exists=True), required=True)
+@click.option('--tolerance', '-t', type=float, default=0.005, help="Contact tolerance distance in meters")
+def contacts(files, tolerance):
+    """
+    Calculates exact face-to-face contact interfaces across multiple COMPAS meshes.
+    """
+    console.print(f"[bold blue]Indexing {len(files)} assembly parts for contact manifold analysis...[/bold blue]")
+    try:
+        meshes_dict = {}
+        for filepath in files:
+            name = os.path.basename(filepath)
+            meshes_dict[name] = Mesh.from_json(filepath)
+
+        t0 = time.perf_counter_ns()
+        interfaces = compute_assembly_contacts_zero_copy(meshes_dict, tolerance)
+        t_ms = (time.perf_counter_ns() - t0) / 1_000_000.0
+
+        table = Table(title="[bold green]Discrete Element Assembly Contacts[/bold green]")
+        table.add_column("Index", style="cyan")
+        table.add_column("Block A", style="magenta")
+        table.add_column("Block B", style="magenta")
+        table.add_column("Area (m²)", style="bold yellow")
+        table.add_column("Centroid [X, Y, Z]", style="cyan")
+
+        for idx, item in enumerate(interfaces, 1):
+            centroid_str = f"[{item['centroid'][0]:.3f}, {item['centroid'][1]:.3f}, {item['centroid'][2]:.3f}]"
+            table.add_row(
+                str(idx),
+                item['block_a'],
+                item['block_b'],
+                f"{item['area_m2']:.6f}",
+                centroid_str
+            )
+
+        console.print(table)
+        console.print(f"[bold green]✔ Analyzed assembly in {t_ms:.4f} ms. Found {len(interfaces)} contacts.[/bold green]")
+        sys.exit(0)
+    except Exception as e:
+        console.print(f"[bold red]Assembly contact solver failed:[/bold red] {e}")
         sys.exit(2)
 
 

@@ -1,11 +1,11 @@
 # COMPAS Forge 🛠️
 
-<p align="center">
+<div align="center">
   <a href="LICENSE">
     <img src="https://img.shields.io/github/license/moaminmo90/compas-forge" alt="License">
   </a>
   <a href="https://www.python.org/">
-    <img src="https://img.shields.io/badge/Python-3.14+-blue.svg" alt="Python">
+    <img src="https://img.shields.io/badge/Python-3.11+-blue.svg" alt="Python">
   </a>
   <a href="https://www.rust-lang.org/">
     <img src="https://img.shields.io/badge/Rust-1.96+-orange.svg" alt="Rust">
@@ -14,21 +14,60 @@
     <img src="https://img.shields.io/badge/Built%20for-COMPAS-purple" alt="COMPAS">
   </a>
   <img src="https://img.shields.io/badge/Status-Research-green" alt="Status">
-</p>
+</div>
 
-> **An Open-Source, High-Performance Rust-Backed Geometry Verification & Preflight Assembly Clearance Engine for the COMPAS Framework**
+> [!NOTE]
+> **An Open-Source, High-Performance Rust-Backed Geometry Verification, Robotic Swept-Collision & Preflight Assembly Clearance Engine for the COMPAS Framework**
 
-<p align="center">
+<div align="center">
   <img src="assets/banner.png" alt="COMPAS Forge Showcase" width="100%"/>
-</p>
+</div>
 
-COMPAS Forge is an open-source, high-performance geometry verification and digital fabrication preflight suite developed to bridge the gap between computational design environments such as Rhino, Grasshopper, and Blender, and real-world physical manufacturing.
+COMPAS Forge is an open-source, high-performance geometry verification and digital fabrication preflight suite developed to bridge the gap between computational design environments (such as Rhino, Grasshopper, and Blender) and real-world physical manufacturing.
 
 Bound to the **COMPAS** ecosystem, this library provides microsecond-precision topological and physical validation checks, optimizing CAD models before exporting them to robotic paths or CNC machinery.
 
 *This is an open-source, research-oriented library designed for academic collaboration. We invite researchers, roboticists, and computational designers to contribute, extend fabrication profiles, and integrate advanced geometric solvers.*
 
+
 ---
+
+
+## Key SOTA Architectural Features
+
+* **Zero-Copy Memory Shared FFI (Pillar 1):** Directly transmutes flat contiguous C-compatible memory layouts (`PyBuffer`) between Python and parallel Rust threads without copy-pasting, eliminating $O(N)$ string serialization overhead.
+* **Continuous Collision Detection (CCD) with Rotational Sub-Stepping (Pillar 2):** Supports simultaneous translation and rotation (helical sweep toolpaths) using piecewise temporal sub-stepping, evaluating exact Time of Impact (TOI) down to 6 decimal places in microseconds.
+* **Parallel Assembly Contact Solver (Pillar 3):** Combines parallel R-Tree broad-phase spatial filters with a robust 2D **Sutherland-Hodgman Polygon Clipper** to extract exact contact areas, centroids, and normals across thousands of adjacent blocks in milliseconds.
+* **Universal COMPAS 1.x / 2.x Schema Parser:** Embedded dual-format JSON deserializer that natively resolves both nested arrays and string-keyed maps, solving version compatibility breaks seamlessly.
+* **Transparent Plugin Acceleration (Pillar 4):** Integrated with COMPAS core plugin auto-discovery. Standard queries like `.is_manifold()` and `.is_closed()` are transparently intercepted and solved by the Rust engine.
+
+
+---
+
+
+## Scaling Performance Benchmark
+
+We evaluated the performance of the transparent plugin acceleration by querying `.is_closed()` on dense parametric geodesic dome structures. COMPAS pure-Python execution times are compared against COMPAS Forge's Rust FFI memory shared engine:
+
+| Mesh Facets (Count) | Pure Python (ms) | Rust Forge FFI (ms) | Speedup Factor |
+| :--- | :--- | :--- | :--- |
+| **400** | 0.476 ms | 0.031 ms | **15.35x** |
+| **1,600** | 1.975 ms | 0.070 ms | **28.41x** |
+| **3,600** | 4.169 ms | 0.129 ms | **32.29x** |
+| **6,400** | 7.576 ms | 0.215 ms | **35.27x** |
+| **10,000** | 11.240 ms | 0.362 ms | **31.06x** |
+| **22,500** | 27.878 ms | 0.737 ms | **37.85x** |
+| **40,000** | 49.254 ms | 1.173 ms | **41.99x** |
+
+At **40,000 facets**, pure-Python COMPAS takes **~49 ms** to resolve watertightness, dropping the viewport frame rate below the interactive threshold (~20 FPS). COMPAS Forge processes the same geometry in **1.17 ms (~850 Hz)**, enabling lag-free real-time manipulation in CAD viewports (Rhino 8 / Grasshopper).
+
+<div align="center">
+  <img src="assets/benchmark_speedup.png" alt="Performance Scaling" width="80%"/>
+</div>
+
+
+---
+
 
 ## Installation
 
@@ -42,12 +81,9 @@ pip install compas-forge
 
 ### Installation from Source
 
-If you wish to modify the Rust core, ensure that you have the Rust toolchain installed.
-
 Requirements:
-
 - Rustc 1.96+
-- Python 3.14+
+- Python 3.11+
 
 ```bash
 git clone https://github.com/moaminmo90/compas-forge.git
@@ -55,196 +91,136 @@ cd compas-forge
 pip install -e .
 ```
 
+
 ---
+
 
 ## Python API Usage Guide
 
-You can import `compas_forge` directly inside Python scripts, Grasshopper Python components, or Blender scripts.
+### 1. Transparent COMPAS Core Acceleration
+Simply install `compas_forge`. Native COMPAS queries are transparently routed to the Rust core under the hood:
 
----
+```python
+from compas.datastructures import Mesh
 
-### 1. High-Fidelity Preflight Verification
+mesh = Mesh.from_json("dense_model.json")
 
-Verify whether a model complies with manufacturing constraints such as dimensions, weight, watertightness, and robotic fabrication profile limits.
+# Executed natively in Rust in microseconds!
+if mesh.is_manifold() and mesh.is_closed():
+    print("Mesh is valid and watertight.")
+```
+
+### 2. Rotational Continuous Collision Detection (CCD)
+Evaluate continuous swept trajectories of simultaneous translations and rotations:
 
 ```python
 import compas_forge
 
-# Run preflight against the KUKA robotic timber fabrication profile
-report = compas_forge.run_preflight_profile(
-    "my_geometry.json",
-    "kuka-timber"
+# Pose: [x, y, z, qx, qy, qz, qw]
+pose_a_start = [-2.5, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+pose_a_end   = [ 2.5, 0.0, 0.0, 0.0, 0.0, 0.707, 0.707] # Rotates 90 deg
+
+result = compas_forge.check_swept_collision_zero_copy(
+    mesh_a, pose_a_start, pose_a_end,
+    mesh_b, pose_b_start, pose_b_end
 )
 
-if report["is_compliant"]:
-    print("✔️ Model is safe for robotic toolpaths.")
-else:
-    print("❌ Preflight violations found!")
-    print(f"  • Watertight: {report['is_watertight']}")
-    print(f"  • Calculated Mass: {report['estimated_mass_kg']:.3f} kg")
-    print(f"  • Open Holes / Naked Edges: {report['boundary_edges_count']}")
+if result["has_collision"]:
+    print(f"Collision at Time of Impact: {result['time_of_impact']:.6f} s")
 ```
 
----
-
-### 2. Auto-Repairing Topological Defects
-
-Automatically weld duplicate vertices and unify face winding directions using a Rust-backed BFS dual-graph traversal.
-
-```python
-import json
-import compas_forge
-
-# Repair on the fly and fetch a detailed audit trail
-repair_report = compas_forge.fix_geometry_file("dirty_mesh.json")
-
-print("Mesh repaired successfully:")
-print(f"  • Merged Vertices: {repair_report['welded_count']}")
-print(f"  • Corrected Face Windings: {repair_report['flipped_count']}")
-
-# Export the clean COMPAS structure back to JSON
-fixed_data = json.loads(repair_report["fixed_json"])
-
-with open("repaired_mesh.json", "w", encoding="utf-8") as f:
-    json.dump(fixed_data, f, indent=4)
-```
-
----
-
-### 3. Assembly Collision & Clearance Solver
-
-Find spatial interferences and clearance violations among multiple CAD components using R*-Tree broad-phase filtering and exact narrow-phase distance checks.
+### 3. Assembly Contact Solver (Sutherland-Hodgman)
+Extract exact contact polygons, centroids, and areas from touching blocks:
 
 ```python
 import compas_forge
 
-assembly_files = {
-    "beam_a.json": open("beam_a.json", encoding="utf-8").read(),
-    "beam_b.json": open("beam_b.json", encoding="utf-8").read(),
-}
+blocks = {"block_0": mesh_0, "block_1": mesh_1}
+contacts = compas_forge.compute_assembly_contacts_zero_copy(blocks, tolerance=0.005)
 
-# Find collisions with a strict 5cm safety clearance threshold
-violations = compas_forge.check_assembly_clashes(
-    assembly_files,
-    clearance_tolerance=0.05
-)
-
-for idx, violation in enumerate(violations, 1):
-    incident_type = (
-        "Collision"
-        if violation["has_intersection"]
-        else "Clearance Violation"
-    )
-
-    print(
-        f"[{idx}] "
-        f"{violation['part_a']} <-> {violation['part_b']} | "
-        f"Distance: {violation['minimum_distance']:.5f} m | "
-        f"Type: {incident_type}"
-    )
+for contact in contacts:
+    print(f"Contact between {contact['block_a']} and {contact['block_b']}")
+    print(f"Contact Area: {contact['area_m2']} m² | Centroid: {contact['centroid']}")
 ```
 
+
 ---
+
 
 ## CLI Usage Guide
 
-COMPAS Forge is also packaged with an auto-documented command line interface built with `click`.
-
----
-
-### 1. General Help Menu
-
 ```bash
-python -m compas_forge --help
+# 1. Run general diagnostics
+python -m compas_forge check my_mesh.json
+
+# 2. Run continuous swept-collision
+python -m compas_forge swept mesh_a.json -2.5,0,0,0,0,0,1 2.5,0,0,0,0,0.7,0.7 mesh_b.json 0,0,0,0,0,0,1 0,0,0,0,0,0,1
+
+# 3. Resolve assembly contacts
+python -m compas_forge contacts block_1.json block_2.json --tolerance 0.005
 ```
 
+
 ---
 
-### 2. Run Preflight Audit
 
+## Examples & Reproducibility Sandbox
+
+We provide ready-to-run educational scripts inside the `examples/` directory to demonstrate and replicate our SOTA algorithms instantly:
+
+1. **Zero-Copy Mesh Healing (`examples/example_zero_copy_healing.py`):** Repairs 1,000s of vertex duplicates and face normal directions in-memory and reconstructs a healthy COMPAS Mesh in milliseconds.
+2. **Rotational Sweep Collision (`examples/example_continuous_collision.py`):** Runs continuous swept collision detection on two moving, rotating objects.
+3. **Voussoir Arch Assembly Solver (`examples/example_assembly_contacts.py`):** Synthesizes a 30-block voussoir arch and solves 29 contact interfaces with centroids and normal vectors in milliseconds.
+
+To run any example:
 ```bash
-python -m compas_forge preflight my_geometry.json \
-  --profile kuka-timber \
-  -r preflight_report.html
+python examples/example_zero_copy_healing.py
 ```
 
----
-
-### 3. Run Assembly Clash Detection
-
+To regenerate the scaling benchmark chart:
 ```bash
-python -m compas_forge clash mesh_a.json mesh_b.json \
-  --clearance 0.05
+python generate_benchmarks.py
 ```
 
----
-
-### 4. Execute Mesh Repair Auto-Fixer
-
-```bash
-python -m compas_forge fix dirty_mesh.json \
-  -o repaired_mesh.json
-```
 
 ---
+
 
 ## Mathematical Formulations & Algorithms
 
 ### 1. Mesh Volume via Gauss's Divergence Theorem
-
-The exact volume $V$ of an arbitrary closed manifold mesh is calculated by summing signed tetrahedra formed from the origin to each boundary triangle:
-
 $$
 V = \frac{1}{6} \sum_i \mathbf{p}_0 \cdot \left(\mathbf{p}_1 \times \mathbf{p}_2\right)
 $$
 
-where $\mathbf{p}_0$, $\mathbf{p}_1$, and $\mathbf{p}_2$ are the vertex coordinates of each triangulated face.
-
----
-
 ### 2. Best-Fit Newell Plane & Planarity Deviation
-
-AEC facade rationalization and timber stock cutting often require robust flatness evaluation. Best-fit reference plane normals are calculated using Newell's method:
-
 $$
 n_x = \sum_{i=0}^{N-1} (y_i - y_{i+1})(z_i + z_{i+1})
 $$
-
 $$
 n_y = \sum_{i=0}^{N-1} (z_i - z_{i+1})(x_i + x_{i+1})
 $$
-
 $$
 n_z = \sum_{i=0}^{N-1} (x_i - x_{i+1})(y_i + y_{i+1})
 $$
 
 The maximum perpendicular distance $d_{max}$ of any vertex $\mathbf{v}_i$ to the centroid plane $\mathbf{c}$ is evaluated as:
-
 $$
 d_{max} = \max_i \left|(\mathbf{v}_i - \mathbf{c}) \cdot \mathbf{n}\right|
 $$
 
----
-
-### 3. Topological Invariants
-
-Algebraic topology validation checks the Euler characteristic $\chi$ and genus $g$ of closed manifold meshes to guarantee topological integrity:
-
+### 3. Topological Invariants (Euler & Genus)
 $$
 \chi = V - E + F
 $$
-
 $$
 g = \frac{2 - \chi}{2}
 $$
 
-where $V$ is the vertex count, $E$ is the unique undirected edge count, and $F$ is the face count.
 
 ---
 
-## Author & Academic Profile
-
-Developed by **Mohammad Amin Moradi** at the intersection of computational geometry, systems programming, and digital fabrication in AEC.
+## Author
 
 - **GitHub:** <https://github.com/moaminmo90>
 - **LinkedIn:** <https://www.linkedin.com/in/moaminmo90>
@@ -254,5 +230,3 @@ Developed by **Mohammad Amin Moradi** at the intersection of computational geome
 ## License
 
 Licensed under the **MIT License**.
-
-See the **[LICENSE](LICENSE)** file for details.

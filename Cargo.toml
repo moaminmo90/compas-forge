@@ -9,13 +9,13 @@ name = "compas_forge_core"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.28", features = ["extension-module", "abi3-py310"] }
+pyo3 = { version = "0.28", features = ["extension-module", "abi3-py311"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 rayon = "1.10"
 rstar = "0.12"
 parry3d-f64 = "0.28"
-simd-json = { version = "0.14", features = ["serde_impl"] } # Updated: removed allow-non-simd
+simd-json = { version = "0.14", features = ["serde_impl"] }
 
 [build-dependencies]
 cc = "1.1"
