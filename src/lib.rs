@@ -2,8 +2,10 @@ use pyo3::prelude::*;
 use pyo3::exceptions::PyValueError;
 use pyo3::buffer::PyBuffer;
 use pyo3::types::PyDict;
-use rstar::{RTree, RTreeObject};
+use rstar::RTree;
 use std::sync::Mutex;
+use std::collections::HashMap;
+use std::sync::OnceLock;
 
 mod parser;
 mod geometry;
@@ -20,6 +22,13 @@ use std::collections::HashSet;
 use parry3d_f64::math::{Vector, Pose, Rotation};
 use parry3d_f64::shape::TriMesh;
 use parry3d_f64::query::{cast_shapes, distance, ShapeCastOptions};
+
+// ساختار اختصاصی کش کردن مش‌ها به صورت سراسری و Thread-Safe
+static MESH_REGISTRY: OnceLock<Mutex<HashMap<String, TriMesh>>> = OnceLock::new();
+
+fn get_mesh_registry() -> &'static Mutex<HashMap<String, TriMesh>> {
+    MESH_REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 #[derive(serde::Serialize)]
 struct FixedMeshReport {
@@ -450,6 +459,113 @@ fn check_swept_collision(
             &p2_step_start,
             step_vel2,
             &mesh2,
+            options,
+        ) {
+            let actual_toi = t_start + hit.time_of_impact * (t_end - t_start);
+            final_hit = Some(SweptCollisionResult {
+                has_collision: true,
+                time_of_impact: actual_toi,
+                witness_a: vec![hit.witness1[0], hit.witness1[1], hit.witness1[2]],
+                witness_b: vec![hit.witness2[0], hit.witness2[1], hit.witness2[2]],
+                normal_a: vec![hit.normal1[0], hit.normal1[1], hit.normal1[2]],
+            });
+            break;
+        }
+    }
+
+    let res = final_hit.unwrap_or(SweptCollisionResult {
+        has_collision: false,
+        time_of_impact: 1.0,
+        witness_a: vec![0.0; 3],
+        witness_b: vec![0.0; 3],
+        normal_a: vec![0.0; 3],
+    });
+
+    serde_json::to_string(&res).map_err(|e| PyValueError::new_err(format!("Serialization error: {}", e)))
+}
+
+#[pyfunction]
+fn register_mesh(
+    mesh_id: String,
+    vertices_flat: Vec<f64>,
+    face_indices: Vec<i32>,
+    face_offsets: Vec<i32>,
+) -> PyResult<String> {
+    let trimesh = trimesh_from_buffers(&vertices_flat, &face_indices, &face_offsets)?;
+    let registry = get_mesh_registry();
+    let mut guard = registry.lock().map_err(|e| {
+        PyValueError::new_err(format!("Failed to acquire mesh registry lock: {}", e))
+    })?;
+    guard.insert(mesh_id.clone(), trimesh);
+    Ok(format!("Mesh '{}' successfully registered.", mesh_id))
+}
+
+#[pyfunction]
+fn clear_mesh_registry() -> PyResult<String> {
+    let registry = get_mesh_registry();
+    let mut guard = registry.lock().map_err(|e| {
+        PyValueError::new_err(format!("Failed to acquire mesh registry lock: {}", e))
+    })?;
+    guard.clear();
+    Ok("Mesh registry cleared successfully.".to_string())
+}
+
+#[pyfunction]
+fn check_swept_collision_cached(
+    mesh1_id: String,
+    pose1_start_vec: Vec<f64>,
+    pose1_end_vec: Vec<f64>,
+    mesh2_id: String,
+    pose2_start_vec: Vec<f64>,
+    pose2_end_vec: Vec<f64>,
+) -> PyResult<String> {
+    let p1_start = parse_pose(&pose1_start_vec)?;
+    let p1_end = parse_pose(&pose1_end_vec)?;
+    let p2_start = parse_pose(&pose2_start_vec)?;
+    let p2_end = parse_pose(&pose2_end_vec)?;
+
+    let registry = get_mesh_registry();
+    let guard = registry.lock().map_err(|e| {
+        PyValueError::new_err(format!("Failed to acquire mesh registry lock: {}", e))
+    })?;
+
+    let mesh1 = guard.get(&mesh1_id).ok_or_else(|| {
+        PyValueError::new_err(format!(
+            "Mesh ID '{}' not found in registry. Please register it first.",
+            mesh1_id
+        ))
+    })?;
+
+    let mesh2 = guard.get(&mesh2_id).ok_or_else(|| {
+        PyValueError::new_err(format!(
+            "Mesh ID '{}' not found in registry. Please register it first.",
+            mesh2_id
+        ))
+    })?;
+
+    let options = ShapeCastOptions::default();
+    let num_steps = 10;
+    let mut final_hit = None;
+
+    for step in 0..num_steps {
+        let t_start = step as f64 / num_steps as f64;
+        let t_end = (step + 1) as f64 / num_steps as f64;
+
+        let p1_step_start = interpolate_pose(&p1_start, &p1_end, t_start);
+        let p1_step_end = interpolate_pose(&p1_start, &p1_end, t_end);
+        let p2_step_start = interpolate_pose(&p2_start, &p2_end, t_start);
+        let p2_step_end = interpolate_pose(&p2_start, &p2_end, t_end);
+
+        let step_vel1 = p1_step_end.translation - p1_step_start.translation;
+        let step_vel2 = p2_step_end.translation - p2_step_start.translation;
+
+        if let Ok(Some(hit)) = cast_shapes(
+            &p1_step_start,
+            step_vel1,
+            mesh1,
+            &p2_step_start,
+            step_vel2,
+            mesh2,
             options,
         ) {
             let actual_toi = t_start + hit.time_of_impact * (t_end - t_start);
@@ -1019,5 +1135,11 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compute_assembly_contacts, m)?)?;
     m.add_function(wrap_pyfunction!(fix_mesh_buffers, m)?)?;
     m.add_function(wrap_pyfunction!(run_preflight_buffers, m)?)?;
+    
+    // ثبت توابع جدید در _core برای دسترسی پایتون
+    m.add_function(wrap_pyfunction!(register_mesh, m)?)?;
+    m.add_function(wrap_pyfunction!(clear_mesh_registry, m)?)?;
+    m.add_function(wrap_pyfunction!(check_swept_collision_cached, m)?)?;
+    
     Ok(())
 }

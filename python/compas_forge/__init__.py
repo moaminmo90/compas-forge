@@ -10,15 +10,75 @@ from compas_forge._core import (
     check_swept_collision,
     compute_assembly_contacts,
     fix_mesh_buffers,
-    run_preflight_buffers
+    run_preflight_buffers,
+    register_mesh,
+    clear_mesh_registry,
+    check_swept_collision_cached
 )
 from compas_forge.reporter import generate_html_report
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 # SOTA COMPAS Plugin Auto-Discovery Metadata (Universal Discovery)
 # This variable enables discovery inside strict environments lacking setuptools (e.g. IronPython inside Rhino)
 __all_plugins__ = ["compas_forge.plugin"]
+
+__all__ = [
+    "validate_compas_json",
+    "detect_clashes_json",
+    "fix_mesh_json",
+    "run_preflight_json",
+    "validate_mesh_buffers",
+    "check_swept_collision",
+    "compute_assembly_contacts",
+    "fix_mesh_buffers",
+    "run_preflight_buffers",
+    "register_mesh",
+    "clear_mesh_registry",
+    "check_swept_collision_cached",
+    "register_mesh_to_cache",
+    "clear_mesh_cache",
+    "check_swept_collision_cached_poses",
+    "compas_mesh_to_buffers",
+    "verify_file",
+    "verify_mesh_zero_copy",
+    "fix_mesh_zero_copy",
+    "run_preflight_profile_zero_copy",
+    "check_swept_collision_zero_copy",
+    "compute_assembly_contacts_zero_copy",
+    "check_assembly_clashes",
+    "fix_geometry_file",
+    "run_preflight_profile"
+]
+
+def register_mesh_to_cache(mesh_id: str, mesh: Mesh) -> str:
+    """
+    Registers a COMPAS Mesh to the high-performance Rust static memory registry.
+    Allows subsequent swept-collision queries to run instantly by referencing its ID.
+    """
+    v, idx, off = compas_mesh_to_buffers(mesh)
+    return register_mesh(str(mesh_id), list(v), list(idx), list(off))
+
+def clear_mesh_cache() -> str:
+    """
+    Clears the high-performance Rust static memory registry to prevent memory leaks.
+    """
+    return clear_mesh_registry()
+
+def check_swept_collision_cached_poses(
+    mesh1_id: str, pose1_start, pose1_end, 
+    mesh2_id: str, pose2_start, pose2_end
+) -> dict:
+    """
+    Evaluates Continuous Collision Detection (CCD) between two pre-registered meshes.
+    Poses are passed as a 7-element array: [x, y, z, qx, qy, qz, qw].
+    Bypasses mesh reconstruction completely, executing in microseconds.
+    """
+    result_raw = check_swept_collision_cached(
+        str(mesh1_id), list(pose1_start), list(pose1_end),
+        str(mesh2_id), list(pose2_start), list(pose2_end)
+    )
+    return json.loads(result_raw)
 
 def compas_mesh_to_buffers(mesh):
     """
