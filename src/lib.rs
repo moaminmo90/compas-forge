@@ -23,7 +23,6 @@ use parry3d_f64::math::{Vector, Pose, Rotation};
 use parry3d_f64::shape::TriMesh;
 use parry3d_f64::query::{cast_shapes, distance, ShapeCastOptions};
 
-// ساختار اختصاصی کش کردن مش‌ها به صورت سراسری و Thread-Safe
 static MESH_REGISTRY: OnceLock<Mutex<HashMap<String, TriMesh>>> = OnceLock::new();
 
 fn get_mesh_registry() -> &'static Mutex<HashMap<String, TriMesh>> {
@@ -1136,7 +1135,6 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(fix_mesh_buffers, m)?)?;
     m.add_function(wrap_pyfunction!(run_preflight_buffers, m)?)?;
     
-    // ثبت توابع جدید در _core برای دسترسی پایتون
     m.add_function(wrap_pyfunction!(register_mesh, m)?)?;
     m.add_function(wrap_pyfunction!(clear_mesh_registry, m)?)?;
     m.add_function(wrap_pyfunction!(check_swept_collision_cached, m)?)?;

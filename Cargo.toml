@@ -2,7 +2,7 @@
 name = "compas_forge"
 version = "0.2.0"
 edition = "2021"
-publish = false
+publish = true
 
 [lib]
 name = "compas_forge_core"
