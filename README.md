@@ -83,7 +83,7 @@ pip install compas-forge
 
 Requirements:
 - Rustc 1.96+
-- Python 3.11+
+- Python 3.9+
 
 ```bash
 git clone https://github.com/moaminmo90/compas-forge.git
