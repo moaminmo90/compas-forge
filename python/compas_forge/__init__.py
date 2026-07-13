@@ -17,7 +17,7 @@ from compas_forge._core import (
 )
 from compas_forge.reporter import generate_html_report
 
-__version__ = "0.2.2"
+__version__ = "0.3.0"
 
 # SOTA COMPAS Plugin Auto-Discovery Metadata (Universal Discovery)
 # This variable enables discovery inside strict environments lacking setuptools (e.g. IronPython inside Rhino)

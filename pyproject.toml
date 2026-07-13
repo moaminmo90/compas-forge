@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "compas-forge"
-version = "0.2.2"
+version = "0.3.0"
 description = "High-performance pre-flight validation and geometry QA engine for COMPAS framework"
 readme = "README.md"
 requires-python = ">=3.9"
